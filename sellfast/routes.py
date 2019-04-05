@@ -25,7 +25,8 @@ def token_required(f):
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'])
             current_user = User.query.filter_by(public_id=data['public_id']).first()
-        except:
+        except Exception as e:
+            print(e)
             return jsonify({'message' : 'Token is invalid!'})
 
         # token is valid and have a user
@@ -119,7 +120,7 @@ def login():
     user = User.query.filter_by(name=auth.username).first()
 
     if not user:
-        return jsonify({'message' : 'No user found!'})
+        return jsonify({'message' : 'No user found!',})
     
     # to get token
     if check_password_hash(user.password, auth.password):
@@ -128,7 +129,10 @@ def login():
             'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, 
             app.config['SECRET_KEY']
             )
-        return jsonify({'token' : token.decode('UTF-8')})
+        return jsonify({
+            'token' : token.decode('UTF-8'),
+            'id':user.id
+            })
         
     return make_response(
         'Could not verify', 
@@ -139,13 +143,14 @@ def login():
 # PRODUCTS
 
 @app.route('/product', methods=['POST'])
-def create_product():
+@token_required
+def create_product(current_user):
     data = request.get_json()
 
     new_product = Product(
         title = data['title'], 
         description = data['description'], 
-        user_id = data['user_id'])
+        user_id = current_user.id)
 
     db.session.add(new_product)
     db.session.commit()
@@ -171,22 +176,26 @@ def get_all_product():
         product_data['image_file'] = product.image_file
         product_data['user_id'] = product.user_id
 
-        # user = User.query.all()
+        user = User.query.get(product.user_id)
     
         # product_data['user_id'] = user.public_id
-        # product_data['user_all'] = len(user)
+        product_data['user_name'] = user.name
 
         output.append(product_data)
 
     return jsonify ({'products' : output})
 
 @app.route('/product/<product_id>', methods=['PUT'])
-def update_product(product_id):
+@token_required
+def update_product(current_user, product_id):
     # Current data
-    product = Product.query.filter_by(id=product_id).first()
+    product = Product.query.get(product_id)
 
     if not product:
         return jsonify({'message' : 'No product found!'})
+
+    if current_user.id != product.user_id:
+        return jsonify({'message' : 'Not your product!'})
 
     # fetch JSON data to update current data in table
     data = request.get_json()
@@ -213,12 +222,16 @@ def update_product(product_id):
     return jsonify({'message' : 'Product updated!', 'product' : product_data})
 
 @app.route('/product/<product_id>', methods=['DELETE'])
-def delete_product(product_id):
+@token_required
+def delete_product(current_user,product_id):
 
-    product = Product.query.filter_by(id=product_id).first()
+    product = Product.query.get(product_id)
 
     if not product:
         return jsonify({'message' : 'No product found!'})
+
+    if current_user.id != product.user_id:
+        return jsonify({'message' : 'Can\'t Delete!'})
         
     db.session.delete(product)
     db.session.commit()
