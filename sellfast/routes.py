@@ -2,7 +2,6 @@ from sellfast import app
 from flask import Flask, request, jsonify, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from sellfast.models import User, Product
-from sellfast.helper import send_sms
 from sellfast import db
 import uuid
 import datetime
@@ -140,21 +139,14 @@ def login():
 # PRODUCTS
 
 @app.route('/product', methods=['POST'])
-@token_required
-def create_product(current_user):
+def create_product():
     data = request.get_json()
 
     new_product = Product(
         title = data['title'], 
         description = data['description'], 
-        user_id = current_user.id)
+        user_id = data['user_id'])
 
-    if request.files.get('image_file'):
-        file = request.files['image_file']
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            new_product.image_file = filename
     db.session.add(new_product)
     db.session.commit()
 
@@ -177,21 +169,21 @@ def get_all_product():
         product_data['description'] = product.description
         product_data['date_posted'] = product.date_posted
         product_data['image_file'] = product.image_file
+        product_data['user_id'] = product.user_id
 
-        user = User.query.get(product.user_id)
+        # user = User.query.all()
     
-        product_data['user_id'] = user.public_id
-        product_data['user_name'] = user.name
+        # product_data['user_id'] = user.public_id
+        # product_data['user_all'] = len(user)
 
         output.append(product_data)
 
     return jsonify ({'products' : output})
 
 @app.route('/product/<product_id>', methods=['PUT'])
-@token_required
-def update_product(current_user, product_id):
+def update_product(product_id):
     # Current data
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
+    product = Product.query.filter_by(id=product_id).first()
 
     if not product:
         return jsonify({'message' : 'No product found!'})
@@ -221,10 +213,9 @@ def update_product(current_user, product_id):
     return jsonify({'message' : 'Product updated!', 'product' : product_data})
 
 @app.route('/product/<product_id>', methods=['DELETE'])
-@token_required
-def delete_product(current_user, product_id):
+def delete_product(product_id):
 
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
+    product = Product.query.filter_by(id=product_id).first()
 
     if not product:
         return jsonify({'message' : 'No product found!'})
