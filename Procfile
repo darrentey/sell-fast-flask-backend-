@@ -1,1 +1,1 @@
-web: ; gunicorn app:sellfast
+web: ; gunicorn sellfast:app
